@@ -47,3 +47,10 @@ video/package*.json
 /shot_*.png
 /wallbar.png
 
+
+# macOS 构建产物与安装包
+.build/
+*.app
+*.dmg
+PerfTicker-mac/.build/
+PerfTicker-mac/dist/
