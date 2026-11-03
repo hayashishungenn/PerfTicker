@@ -30,6 +30,8 @@ final class AppController: NSObject, NSWindowDelegate {
     private var lastTick: Int64 = -1
     private var frameCount: Double = 0
     private var ecoLastSave: Double = 0
+    private var lastTickMs: Int64 = 0
+    private var lastStatusSec: Int64 = 0
     private var prevCpu: [Int32: Double] = [:]
     private var prevPids = Set<Int32>()
     private var prevNames: [Int32: String] = [:]
@@ -40,6 +42,10 @@ final class AppController: NSObject, NSWindowDelegate {
     private var settingsHover = -1
     private var setPanel = CGRect.zero, setAuto = CGRect.zero, setMarquee = CGRect.zero
     private var setThemeDark = CGRect.zero, setThemeLight = CGRect.zero, setThemeAuto = CGRect.zero, setLog = CGRect.zero
+
+    // 辅助功能：减弱动态效果 / 增强对比度（系统设置即时生效）
+    private var reduceMotionObserver: NSKeyValueObservation?
+    private var increaseContrastObserver: NSKeyValueObservation?
 
     var gadgetOn: Bool { gadgetWindow != nil && gadgetWindow!.isVisible }
 
@@ -74,9 +80,24 @@ final class AppController: NSObject, NSWindowDelegate {
 
         if settings.gadget { showGadget() }
         if let warn = cfgWarn { addTape("配置提示 · " + warn, Theme.warn) }
+        if settings.themeMode == 2 { watchSystemAppearance() }
+        watchAccessibility()
 
         uiTimer = Timer.scheduledTimer(withTimeInterval: 0.033, repeats: true) { [weak self] _ in
             self?.onUiTick()
+        }
+    }
+
+    /// 跟随系统辅助功能偏好：减弱动态效果 / 增强对比度（HIG Accessibility）
+    private func watchAccessibility() {
+        let ws = NSWorkspace.shared
+        reduceMotionObserver = ws.observe(\.accessibilityDisplayShouldReduceMotion, options: [.initial, .new]) { [weak self] _, ch in
+            Motion.reduce = ch.newValue ?? false
+            DispatchQueue.main.async { self?.view?.setNeedsDisplay(self?.view?.bounds ?? .zero) }
+        }
+        increaseContrastObserver = ws.observe(\.accessibilityDisplayShouldIncreaseContrast, options: [.initial, .new]) { [weak self] _, ch in
+            Theme.hiContrast = ch.newValue ?? false
+            DispatchQueue.main.async { self?.applyTheme() }
         }
     }
 
@@ -182,8 +203,17 @@ final class AppController: NSObject, NSWindowDelegate {
     }
 
     // MARK: - 主题
+    private var appearanceObserver: NSKeyValueObservation?
+
     private func isSystemDark() -> Bool {
         NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    func watchSystemAppearance() {
+        guard appearanceObserver == nil else { return }
+        appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.applyTheme() }
+        }
     }
 
     func applyTheme() {
@@ -198,6 +228,7 @@ final class AppController: NSObject, NSWindowDelegate {
 
     func setThemeMode(_ mode: Int) {
         settings.themeMode = max(0, min(2, mode))
+        if mode == 2 { watchSystemAppearance() }
         applyTheme()
         saveSettings()
     }
@@ -252,7 +283,7 @@ final class AppController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func menuResetEconomy() { resetEconomy() }
+    @objc func menuResetEconomy() { resetEconomy() }
 
     @objc func exitApp() {
         saveSettings()
@@ -284,7 +315,14 @@ final class AppController: NSObject, NSWindowDelegate {
     // MARK: - 界面心跳
     private func onUiTick() {
         let onScreen = window.isVisible && !window.isMiniaturized
-        frameCount += onScreen ? 0.033 : 0.25
+
+        // 动画相位与营收结算都用真实墙钟 dt，避免系统繁忙/休眠恢复时漂移
+        let now = nowMs()
+        var dt = lastTickMs > 0 ? Double(now - lastTickMs) / 1000 : 0.033
+        lastTickMs = now
+        if dt < 0 { dt = 0.033 }
+        if dt > 0.25 { dt = 0.25 }   // 长时间挂起后不追帧
+        frameCount += dt
         st.frame = frameCount
 
         let snap = sampler.latest
@@ -294,7 +332,7 @@ final class AppController: NSObject, NSWindowDelegate {
         }
 
         if st.economy.enabled {
-            if !st.paused { st.economy.accrue(onScreen ? 0.033 : 0.25, st.snap) }
+            if !st.paused { st.economy.accrue(dt, st.snap) }
             if onScreen { econPanel.invalidate() }
         }
 
@@ -302,7 +340,12 @@ final class AppController: NSObject, NSWindowDelegate {
 
         var tweening = false
         if !st.paused {
-            for m in st.metrics where m.tween() { tweening = true }
+            if Motion.reduce {
+                // 系统开启「减弱动态效果」：数值直接落定，不做缓动
+                for m in st.metrics { m.shown = m.value }
+            } else {
+                for m in st.metrics where m.tween() { tweening = true }
+            }
         }
         if tweening {
             indexPanel.invalidate()
@@ -318,8 +361,9 @@ final class AppController: NSObject, NSWindowDelegate {
             saveSettings()
         }
 
-        // 状态栏气泡简报
-        if let button = statusItem?.button {
+        // 状态栏气泡简报（每秒一次即可）
+        if let button = statusItem?.button, now / 1000 != lastStatusSec {
+            lastStatusSec = now / 1000
             let s = st.snap
             var tip = String(format: " CPU %.0f%% · GPU %.0f%% · 内存 %.0f%%", s.cpuPct, s.gpu.available ? s.gpu.utilPct : 0, s.memPct)
             if st.economy.enabled { tip += String(format: " · ¥%.0f", st.economy.total) }
@@ -344,10 +388,16 @@ final class AppController: NSObject, NSWindowDelegate {
             st.procHist[p.pid]?.push(p.cpuPct)
         }
         if prevCpu.count > 4000 { prevCpu.removeAll() }
+        // 进程历史只增不减会长期占用内存：超限后移除已退出进程的条目
+        if st.procHist.count > 1200 {
+            for pid in st.procHist.keys.filter({ prevCpu[$0] == nil }).prefix(600) {
+                st.procHist.removeValue(forKey: pid)
+            }
+        }
 
         if !hwProbed && !s.procs.isEmpty {
             hwProbed = true
-            hw.probe(cpuName: sampler.cpuName, gpuName: sampler.gpuName, gpuCores: sampler.gpuCores, hasGpu: s.gpu.available, memTotalGB: s.memTotalGB)
+            hw.probe(cpuName: sampler.cpuName, gpuName: s.gpu.name, gpuCores: s.gpu.cores, hasGpu: s.gpu.available, memTotalGB: s.memTotalGB)
             st.economy.applyWeights(hw)
             addTape("硬件探测完成 · \(hw.logicalCores) 核 / \(String(format: "%.0fG", hw.memTotalGB)) 内存 / \(hw.gpuName)", Theme.blue)
         }
@@ -427,15 +477,28 @@ final class AppController: NSObject, NSWindowDelegate {
 
     private func trim(_ s: String) -> String { s.count > 22 ? String(s.prefix(22)) + "…" : s }
 
+    private static let tapeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     func addTape(_ text: String, _ color: NSColor) {
         let now = nowMs()
         if let last = st.tape.last, last.text == text && now - last.ms < 5000 { return }
-        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"
-        st.tape.append(TapeEvent(ms: now, time: f.string(from: Date()), text: text, color: color))
+        st.tape.append(TapeEvent(ms: now, time: Self.tapeFormatter.string(from: Date()), text: text, color: color))
         if st.tape.count > 240 { st.tape.removeFirst(st.tape.count - 240) }
     }
 
     // MARK: - 操作命令入口
+    /// 菜单栏「关于 PerfTicker」
+    @objc func showAboutPanel() { showAbout() }
+
+    /// 菜单栏「设置…」⌘,
+    @objc func showSettingsPanel() {
+        if !settingsOpen { toggleSettings() }
+    }
+
     func selectMetric(_ code: String) {
         guard let idx = st.metrics.firstIndex(where: { $0.code == code }) else { return }
         st.selectedIndex = idx
@@ -466,19 +529,19 @@ final class AppController: NSObject, NSWindowDelegate {
         view.setNeedsDisplay(view.bounds)
     }
 
-    func togglePause() {
+    @objc func togglePause() {
         st.paused = !st.paused
         addTape(st.paused ? "行情已暂停" : "行情恢复推送", st.paused ? Theme.warn : Theme.down)
         view.setNeedsDisplay(view.bounds)
     }
 
-    func toggleTopMost() {
+    @objc func toggleTopMost() {
         st.topMost = !st.topMost
         window.level = st.topMost ? .floating : .normal
         view.setNeedsDisplay(view.bounds)
     }
 
-    func toggleEconomy() {
+    @objc func toggleEconomy() {
         st.economy.enabled = !st.economy.enabled
         layoutPanels()
         addTape(st.economy.enabled ? "营收系统已启动 · 按占用率结算产能" : "营收系统已关闭",
@@ -486,7 +549,7 @@ final class AppController: NSObject, NSWindowDelegate {
         view.setNeedsDisplay(view.bounds)
     }
 
-    func toggleColor() {
+    @objc func toggleColor() {
         st.redUp = !st.redUp
         st.applyColorMode()
         view.setNeedsDisplay(view.bounds)
@@ -512,19 +575,24 @@ final class AppController: NSObject, NSWindowDelegate {
     }
 
     func toggleAutoStart() {
-        settings.autoStart = !settings.autoStart
-        if #available(macOS 13.0, *) {
-            do {
-                if settings.autoStart {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-            } catch {
-                Diag.error("AUTOSTART", "\(error)")
-            }
+        guard #available(macOS 13.0, *) else {
+            addTape("开机自启动需要 macOS 13 及以上", Theme.warn)
+            return
         }
-        addTape(settings.autoStart ? "已设置开机自启动" : "已取消开机自启动", Theme.gold)
+        let want = !settings.autoStart
+        do {
+            if want {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            settings.autoStart = want
+            addTape(want ? "已设置开机自启动" : "已取消开机自启动", Theme.gold)
+        } catch {
+            // 注册失败时回滚开关状态，避免设置与实际不符
+            Diag.error("AUTOSTART", "\(error)")
+            addTape("开机自启动设置失败 · \(error.localizedDescription)", Theme.warn)
+        }
         saveSettings()
         view.setNeedsDisplay(view.bounds)
     }
@@ -533,6 +601,7 @@ final class AppController: NSObject, NSWindowDelegate {
         if st.procSort == i { st.procSortDesc = !st.procSortDesc }
         else { st.procSort = i; st.procSortDesc = true }
         sortProcs()
+        procPanel.invalidateView()
         procPanel.invalidate()
     }
 
@@ -552,6 +621,7 @@ final class AppController: NSObject, NSWindowDelegate {
         else { st.pinned.insert(name) }
         sortProcs()
         addTape(st.pinned.contains(name) ? "已置顶 \(trim(name))" : "已取消置顶 \(trim(name))", Theme.gold)
+        procPanel.invalidateView()
         procPanel.invalidate()
     }
 
@@ -567,7 +637,7 @@ final class AppController: NSObject, NSWindowDelegate {
         let name = st.procs.first(where: { $0.pid == pid })?.name ?? "\(pid)"
         let menu = NSMenu()
         let killItem = NSMenuItem(title: "全抛 · 结束进程 (\(trim(name)))", action: #selector(menuKillProc(_:)), keyEquivalent: "")
-        killItem.representedObject = pid
+        killItem.representedObject = ["pid": Int(pid), "name": name]
         killItem.target = self
         menu.addItem(killItem)
 
@@ -588,10 +658,19 @@ final class AppController: NSObject, NSWindowDelegate {
     }
 
     @objc private func menuKillProc(_ sender: NSMenuItem) {
-        guard let pid = sender.representedObject as? Int32 else { return }
-        let name = st.procs.first(where: { $0.pid == pid })?.name ?? "\(pid)"
+        guard let info = sender.representedObject as? [String: Any],
+              let pidVal = info["pid"] as? Int,
+              let name = info["name"] as? String else { return }
+        let pid = Int32(truncatingIfNeeded: pidVal)
         if pid == ProcessInfo.processInfo.processIdentifier {
             addTape("全抛被拒绝 · 不能结束行情终端自身", Theme.warn)
+            return
+        }
+        // 防止 PID 复用误杀：菜单弹出后目标可能已退出、PID 被系统分配给别的进程
+        let cur = st.procs.first(where: { $0.pid == pid })
+        guard let cur = cur, cur.name == name else {
+            addTape("全抛取消 · \(trim(name)) (\(pid)) 已退出或已变化", Theme.warn)
+            view.setNeedsDisplay(view.bounds)
             return
         }
         if kill(pid, SIGTERM) == 0 {

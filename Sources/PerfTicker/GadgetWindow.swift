@@ -1,7 +1,7 @@
 import AppKit
 
 /// 桌面小挂件：常驻桌面的迷你行情面板，双击标题打开主面板。
-final class GadgetWindow: NSWindow {
+final class GadgetWindow: NSPanel {
     private let gadgetView: GadgetView
     init(app: AppController) {
         gadgetView = GadgetView(app: app)
@@ -18,11 +18,14 @@ final class GadgetWindow: NSWindow {
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.contentView = gadgetView
         self.isMovableByWindowBackground = false
+        self.becomesKeyOnlyIfNeeded = true
 
         let wa = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         var gx = CGFloat(app.settings.gadgetX)
         var gy = CGFloat(app.settings.gadgetY)
-        if gx < 0 || gy < 0 || gx > wa.maxX - 100 || gy > wa.maxY - 100 {
+        // 副屏可能在主屏左侧（坐标为负），只要记忆点落在任一屏幕内就有效
+        let onAnyScreen = NSScreen.screens.contains { $0.frame.insetBy(dx: -40, dy: -40).contains(NSPoint(x: gx, y: gy)) }
+        if !onAnyScreen {
             gx = wa.maxX - 372 - 28
             gy = wa.minY + 28
         }
@@ -56,9 +59,26 @@ final class GadgetView: NSView {
     deinit { timer?.invalidate() }
     override var isFlipped: Bool { true }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        var hh = 0
+        if pinRect.contains(p) { hh = 1 }
+        else if closeRect.contains(p) { hh = 2 }
+        if hh != hover { hover = hh; setNeedsDisplay(bounds) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if hover != 0 { hover = 0; setNeedsDisplay(bounds) }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let w = bounds.width
-        let h = bounds.height
 
         Theme.roundedFill(bounds, 8, Theme.panel.a(0.95))
         Theme.roundedRect(bounds, 8, fill: nil, stroke: Theme.line2, width: 1)

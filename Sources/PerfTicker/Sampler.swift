@@ -35,8 +35,6 @@ final class Sampler {
         let n = sysctlString("machdep.cpu.brand_string")
         return n.isEmpty ? "处理器" : n
     }()
-    private(set) var gpuName = "图形处理器"
-    private(set) var gpuCores = 0
 
     var latest: Snapshot { lock.lock(); defer { lock.unlock() }; return _latest }
 
@@ -44,9 +42,7 @@ final class Sampler {
     private var prevCpu: [[UInt32]] = []
     private var prevWall: Double = 0
     private var prevDiskR: Int64 = -1, prevDiskW: Int64 = -1
-    private var prevNetRx: UInt64 = 0, prevNetTx: UInt64 = 0, prevNetInit = false
-    private var netRxAcc: UInt64 = 0, netTxAcc: UInt64 = 0
-    private var prevIf: [String: (UInt32, UInt32)] = [:]
+    private var prevIf: [String: (UInt64, UInt64)] = [:]
     private var prevProc: [Int32: (cpuNs: UInt64, csw: Int32)] = [:]
     private var prevGpuNs: [Int32: UInt64] = [:]
     private var tb = mach_timebase_info_data_t()
@@ -172,7 +168,6 @@ final class Sampler {
                 else if let m = d["model"] as? Data { g.name = String(decoding: m.filter { $0 != 0 }, as: UTF8.self) }
                 g.cores = (d["gpu-core-count"] as? NSNumber)?.intValue ?? 0
                 if best == nil || g.utilPct > best!.utilPct { best = g }
-                if gpuName == "图形处理器" { gpuName = g.name; gpuCores = g.cores }
             }
             IOObjectRelease(e)
             e = IOIteratorNext(it)
@@ -247,7 +242,7 @@ final class Sampler {
         defer { freeifaddrs(ifap) }
         var p: UnsafeMutablePointer<ifaddrs>? = first
         var rxDelta: UInt64 = 0, txDelta: UInt64 = 0
-        var cur: [String: (UInt32, UInt32)] = [:]
+        var cur: [String: (UInt64, UInt64)] = [:]
         while let ifa = p {
             defer { p = ifa.pointee.ifa_next }
             guard let addr = ifa.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK),
@@ -256,11 +251,17 @@ final class Sampler {
             if flags & IFF_UP == 0 || flags & IFF_LOOPBACK != 0 { continue }
             let name = String(cString: ifa.pointee.ifa_name)
             if name.hasPrefix("awdl") || name.hasPrefix("llw") || name.hasPrefix("ap") || name.hasPrefix("bridge") { continue }
-            let d = data.assumingMemoryBound(to: if_data.self).pointee
-            cur[name] = (d.ifi_ibytes, d.ifi_obytes)
+            // 高速接口优先走 64 位计数器（if_data.ifi_ibytes 是 32 位，1 秒内 >4GB 即回绕）
+            if Int(addr.pointee.sa_len) >= MemoryLayout<if_data64>.size {
+                let d = data.assumingMemoryBound(to: if_data64.self).pointee
+                cur[name] = (d.ifi_ibytes, d.ifi_obytes)
+            } else {
+                let d = data.assumingMemoryBound(to: if_data.self).pointee
+                cur[name] = (UInt64(d.ifi_ibytes), UInt64(d.ifi_obytes))
+            }
             if let pv = prevIf[name] {
-                rxDelta += UInt64(d.ifi_ibytes &- pv.0)   // 32 位计数器回绕安全
-                txDelta += UInt64(d.ifi_obytes &- pv.1)
+                rxDelta += cur[name]!.0 &- pv.0   // 无符号回绕安全
+                txDelta += cur[name]!.1 &- pv.1
             }
         }
         prevIf = cur
@@ -272,7 +273,10 @@ final class Sampler {
 
     // MARK: 进程
     private func sampleProcs(_ s: Snapshot, dt: Double) {
-        let cap = 4096
+        // 先取实际进程数再分配缓冲，避免固定 4096 上限静默截断高 PID 新进程
+        let n0 = proc_listallpids(nil, 0)
+        guard n0 > 0 else { return }
+        let cap = Int(n0) + 64   // 预留采样间隙里新起的进程
         var pids = [Int32](repeating: 0, count: cap)
         let n = Int(proc_listallpids(&pids, Int32(cap * MemoryLayout<Int32>.size)))
         guard n > 0 else { return }
@@ -307,7 +311,8 @@ final class Sampler {
             let ns = ticks &* UInt64(tb.numer) / UInt64(tb.denom)
             curProc[pid] = (ns, ti.pti_csw)
             if dt > 0, let pv = prevProc[pid] {
-                if ns >= pv.cpuNs { p.cpuPct = Double(ns - pv.cpuNs) / (dt * 1e9) * 100 }
+                // 整机口径：占满一颗核心 = 100/核数，钳制 0-100（与进程表阈值体系一致）
+                if ns >= pv.cpuNs { p.cpuPct = min(100, Double(ns - pv.cpuNs) / (dt * 1e9) * 100 / Double(cores)) }
                 let dc = Double(ti.pti_csw &- pv.csw)
                 if dc > 0 { csw += dc }
                 if let g = gpuNow[pid], let pg = prevGpuNs[pid], g >= pg {

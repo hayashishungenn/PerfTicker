@@ -16,7 +16,7 @@ final class MainContentView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let area = trackingArea { removeTrackingArea(area) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow], owner: self, userInfo: nil)
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
         addTrackingArea(area)
         trackingArea = area
     }
@@ -129,7 +129,7 @@ final class MainContentView: NSView {
         case "c", "C":
             controller.toggleColor()
         default:
-            if event.keyCode == 99 { // F3 or F9
+            if event.keyCode == 99 || event.keyCode == 101 { // F3 / F9：开关挂件
                 controller.toggleGadget()
             } else {
                 super.keyDown(with: event)

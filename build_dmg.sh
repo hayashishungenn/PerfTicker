@@ -4,8 +4,8 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
-echo "=== 1. 构建 release 二进制 ==="
-swift build -c release
+echo "=== 1. 构建 release 二进制（Universal: arm64 + x86_64）==="
+swift build -c release --arch arm64 --arch x86_64
 
 APP_NAME="PerfTicker"
 DIST_DIR="$DIR/dist"
@@ -56,7 +56,10 @@ cat << 'PLIST' > "$APP_BUNDLE/Contents/Info.plist"
 PLIST
 
 echo "=== 3. 签名应用包 (本地 ad-hoc 签名) ==="
-codesign --force --deep --sign - "$APP_BUNDLE"
+codesign --force --sign - "$APP_BUNDLE"
+
+echo "=== 校验产物架构 ==="
+lipo -info "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 echo "=== 4. 生成 DMG 安装包 ==="
 DMG_STAGING="$DIST_DIR/dmg_staging"

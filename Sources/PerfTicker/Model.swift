@@ -12,12 +12,19 @@ func nowMs() -> Int64 { Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000) 
 
 func fmtD(_ v: Double, _ d: Int) -> String { String(format: "%.\(d)f", v) }
 
+private var nfCache: [Int: NumberFormatter] = [:]
 func fmtThousands(_ v: Double, decimals: Int = 0) -> String {
-    let f = NumberFormatter()
-    f.numberStyle = .decimal
-    f.minimumFractionDigits = decimals
-    f.maximumFractionDigits = decimals
-    f.locale = Locale(identifier: "en_US")
+    let f: NumberFormatter
+    if let cached = nfCache[decimals] {
+        f = cached
+    } else {
+        f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.minimumFractionDigits = decimals
+        f.maximumFractionDigits = decimals
+        f.locale = Locale(identifier: "en_US")
+        nfCache[decimals] = f
+    }
     return f.string(from: NSNumber(value: v)) ?? String(v)
 }
 
@@ -49,6 +56,7 @@ final class Metric {
     var shown = 0.0
 
     init() { ring = [Tick](repeating: Tick(), count: 3600) }
+    static let empty: Metric = { let m = Metric(); m.code = "000000"; m.name = "--"; return m }()
 
     func tween() -> Bool {
         let d = value - shown
@@ -178,7 +186,7 @@ enum Catalog {
 final class ProcSample {
     var pid: Int32 = 0
     var name = ""
-    var cpuPct = 0.0       // 单核百分比（100 = 占满一颗核心）
+    var cpuPct = 0.0       // 整机占比（0-100）：占满全部核心 = 100
     var gpuPct = 0.0
     var memMB = 0.0
     var threads = 0
@@ -227,7 +235,7 @@ final class AppState {
     var metrics: [Metric] = []
     var snap = Snapshot()
     var selectedIndex = 1
-    var selected: Metric { metrics[max(0, min(selectedIndex, metrics.count - 1))] }
+    var selected: Metric { metrics.isEmpty ? Metric.empty : metrics[max(0, min(selectedIndex, metrics.count - 1))] }
     var periodMs: Int64 = 5000
     var intervalMs = 1000
     var paused = false
@@ -396,9 +404,13 @@ enum Diag {
     }
     static var file: URL { logDir.appendingPathComponent("perfticker.log") }
 
+    private static var dirEnsured = false
     static func write(_ tag: String, _ msg: String) {
         lock.lock(); defer { lock.unlock() }
-        try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+        if !dirEnsured {
+            try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+            dirEnsured = true
+        }
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         let line = "\(f.string(from: Date())) [\(tag)] \(msg)\n"
         if let attr = try? FileManager.default.attributesOfItem(atPath: file.path),

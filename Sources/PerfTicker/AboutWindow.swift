@@ -37,9 +37,14 @@ final class AboutView: NSView {
     required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeAlways], owner: self, userInfo: nil))
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let w = bounds.width
-        let h = bounds.height
 
         Theme.roundedFill(bounds, 8, Theme.popBg)
         Theme.roundedRect(bounds, 8, fill: nil, stroke: Theme.line2)

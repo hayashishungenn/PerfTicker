@@ -10,9 +10,15 @@ extension NSColor {
 
 enum Align { case left, center, right }
 
-/// 视觉系统：深/浅两套证券终端配色 + 字体阶梯 + 绘图工具（与 Windows 版 Theme.cs 一一对应）。
+/// 系统辅助功能偏好（由 AppController 通过 NSWorkspace KVO 更新）
+enum Motion {
+    static var reduce = false   // 「减弱动态效果」：停跑马灯滚动与数值缓动
+}
+
+/// 视觉系统：深/浅两套证券终端配色 + 字体阶梯 + 绘图工具。
 enum Theme {
     static var dark = true
+    static var hiContrast = false   // 「增强对比度」：描边加强
 
     static var bgDeep = NSColor.black, bg = NSColor.black, panel = NSColor.black, panelHi = NSColor.black
     static var panelSoft = NSColor.black, rowHover = NSColor.black, rowSel = NSColor.black
@@ -72,6 +78,11 @@ enum Theme {
             gold = rgb(0xB4, 0x84, 0x1A); goldDim = rgb(0x8C, 0x6C, 0x1E); goldSoft = rgb(0x9A, 0x66, 0x00)
             blue = rgb(0x1F, 0x6F, 0xEB); purple = rgb(0x7A, 0x4F, 0xD0); cyan = rgb(0x0E, 0x8C, 0x8C)
             warn = rgb(0xB2, 0x6A, 0x00)
+        }
+        if hiContrast {
+            // HIG「增强对比度」：分隔线/描边与背景拉开更大反差
+            line = dark ? rgb(0x2E, 0x38, 0x4A) : rgb(0xB6, 0xC0, 0xD0)
+            line2 = dark ? rgb(0x42, 0x50, 0x66) : rgb(0x8A, 0x98, 0xAC)
         }
         applyColorMode(redUp: redUp)
     }
@@ -171,12 +182,20 @@ enum Theme {
     }
 
     // ── 文字 ──
-    private static var attrCache: [String: [NSAttributedString.Key: Any]] = [:]
+    private static var psCache: [String: NSParagraphStyle] = [:]
 
     private static func attrs(_ f: NSFont, _ c: NSColor, _ al: Align, _ ellipsis: Bool) -> [NSAttributedString.Key: Any] {
-        let ps = NSMutableParagraphStyle()
-        ps.alignment = al == .left ? .left : al == .center ? .center : .right
-        ps.lineBreakMode = ellipsis ? .byTruncatingTail : .byClipping
+        let key = "\(al)-\(ellipsis)"
+        let ps: NSParagraphStyle
+        if let cached = psCache[key] {
+            ps = cached
+        } else {
+            let p = NSMutableParagraphStyle()
+            p.alignment = al == .left ? .left : al == .center ? .center : .right
+            p.lineBreakMode = ellipsis ? .byTruncatingTail : .byClipping
+            psCache[key] = p
+            ps = p
+        }
         return [.font: f, .foregroundColor: c, .paragraphStyle: ps]
     }
 

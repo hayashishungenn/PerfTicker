@@ -140,7 +140,7 @@ final class FooterPanel: Panel {
         } else if total > 8 && mqRight - mqLeft > 60 {
             ctx.saveGState()
             ctx.clip(to: CGRect(x: mqLeft, y: 0, width: mqRight - mqLeft, height: h))
-            var sx = mqLeft - CGFloat(st.frame * 52).truncatingRemainder(dividingBy: total)
+            var sx = mqLeft - (Motion.reduce ? 0 : CGFloat(st.frame * 52).truncatingRemainder(dividingBy: total))
             var pass = 0
             while pass < 2 && sx < mqRight {
                 for s in segs {
@@ -221,6 +221,9 @@ final class ProcPanel: Panel {
     private var viewTick: Int64 = -1
     private var viewFilter = ""
     private var viewPins = -1
+
+    /// 排序/置顶变化后立即失效缓存，不等下一个采样 tick
+    func invalidateView() { viewTick = -1 }
 
     func view() -> [ProcSample] {
         let tick = st.snap.tick
