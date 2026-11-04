@@ -12,6 +12,7 @@ func nowMs() -> Int64 { Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000) 
 
 func fmtD(_ v: Double, _ d: Int) -> String { String(format: "%.\(d)f", v) }
 
+/// 数字千分位格式化缓存（仅主线程使用，勿在后台队列调用）
 private var nfCache: [Int: NumberFormatter] = [:]
 func fmtThousands(_ v: Double, decimals: Int = 0) -> String {
     let f: NumberFormatter
@@ -334,18 +335,20 @@ final class Economy {
         let penalty: Double = [1.0, 0.95, 0.88, 0.78][max(0, min(3, s.thermal))]
         tempPenalty = penalty
         var sum = 0.0
+        // EMA 基准 0.12/帧（33ms），按真实 dt 归一：帧率波动时平滑时间常数保持稳定
+        let k = min(1, 1 - pow(1 - 0.12, dt / 0.033))
         for i in 0..<parts.count {
             let p = parts[i]
             let pen = i <= 1 ? penalty : 1.0
             let n = netOf(p, loads[i], pen)
             p.load = loads[i]
-            p.loadShown += (loads[i] - p.loadShown) * 0.12
-            p.net += (n - p.net) * 0.12
+            p.loadShown += (loads[i] - p.loadShown) * k
+            p.net += (n - p.net) * k
             p.total += n * dt
             sum += n
         }
         total += sum * dt
-        rate += (sum - rate) * 0.12
+        rate += (sum - rate) * k
         if rate > peakRate { peakRate = rate }
         histAcc += dt
         if histAcc >= 1.0 {

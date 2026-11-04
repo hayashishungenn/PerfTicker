@@ -182,6 +182,7 @@ enum Theme {
     }
 
     // ── 文字 ──
+    // 段落样式缓存（仅主线程绘制路径使用）
     private static var psCache: [String: NSParagraphStyle] = [:]
 
     private static func attrs(_ f: NSFont, _ c: NSColor, _ al: Align, _ ellipsis: Bool) -> [NSAttributedString.Key: Any] {

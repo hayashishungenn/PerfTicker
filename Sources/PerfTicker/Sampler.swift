@@ -109,6 +109,7 @@ final class Sampler {
         var core: [Double] = []
         if prevCpu.count == cur.count {
             for i in 0..<cur.count {
+                // 「用户态」口径含 nice（与活动监视器一致）：USER + NICE
                 let u = Double(cur[i][0] &- prevCpu[i][0]) + Double(cur[i][3] &- prevCpu[i][3])
                 let sy = Double(cur[i][1] &- prevCpu[i][1])
                 let id = Double(cur[i][2] &- prevCpu[i][2])

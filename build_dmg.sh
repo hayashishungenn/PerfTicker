@@ -55,8 +55,16 @@ cat << 'PLIST' > "$APP_BUNDLE/Contents/Info.plist"
 </plist>
 PLIST
 
-echo "=== 3. 签名应用包 (本地 ad-hoc 签名) ==="
-codesign --force --sign - "$APP_BUNDLE"
+echo "=== 3. 签名应用包 ==="
+# 有 Developer ID 证书就用它（可再走 notarytool 公证对外分发），否则退回本地 ad-hoc
+DEV_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+if [ -n "$DEV_ID" ]; then
+    echo "使用 Developer ID: $DEV_ID"
+    codesign --force --options runtime --sign "$DEV_ID" "$APP_BUNDLE"
+else
+    echo "未找到 Developer ID 证书，使用本地 ad-hoc 签名（对外分发会触发 Gatekeeper 提示）"
+    codesign --force --sign - "$APP_BUNDLE"
+fi
 
 echo "=== 校验产物架构 ==="
 lipo -info "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
