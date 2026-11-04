@@ -82,6 +82,11 @@ final class MainContentView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        // 设置浮层打开时屏蔽单键快捷键，Esc 关闭浮层
+        if controller.settingsOpen {
+            if event.keyCode == 53 { controller.toggleSettings() }
+            return
+        }
         if controller.st.searchActive {
             if event.keyCode == 51 { // Backspace
                 if !controller.st.procFilter.isEmpty {
@@ -98,7 +103,15 @@ final class MainContentView: NSView {
                 controller.setProcFilter("")
                 return
             }
-            if let chars = event.characters, !chars.isEmpty, !event.modifierFlags.contains(.command) {
+            if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "v" {
+                if let text = NSPasteboard.general.string(forType: .string) {
+                    controller.setProcFilter(controller.st.procFilter + text.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                return
+            }
+            // 过滤方向键/F 功能键的私有区字符（U+F700–U+F73F），只接受可打印字符
+            if let chars = event.characters, !chars.isEmpty, !event.modifierFlags.contains(.command),
+               chars.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value < 0xF700 }) {
                 controller.setProcFilter(controller.st.procFilter + chars)
                 return
             }

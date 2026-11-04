@@ -23,9 +23,11 @@ final class GadgetWindow: NSPanel {
         let wa = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         var gx = CGFloat(app.settings.gadgetX)
         var gy = CGFloat(app.settings.gadgetY)
-        // 副屏可能在主屏左侧（坐标为负），只要记忆点落在任一屏幕内就有效
+        // 未保存过位置（哨兵 -1）时直接走默认定位；否则只要记忆点落在任一屏幕内就有效
+        // （副屏可能在主屏左侧，坐标为负）
+        let hasSaved = app.settings.gadgetX > -9000 && app.settings.gadgetY > -9000
         let onAnyScreen = NSScreen.screens.contains { $0.frame.insetBy(dx: -40, dy: -40).contains(NSPoint(x: gx, y: gy)) }
-        if !onAnyScreen {
+        if !hasSaved || !onAnyScreen {
             gx = wa.maxX - 372 - 28
             gy = wa.minY + 28
         }
@@ -51,7 +53,9 @@ final class GadgetView: NSView {
         self.app = app
         super.init(frame: NSRect(x: 0, y: 0, width: 372, height: 214))
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.setNeedsDisplay(self?.bounds ?? .zero)
+            // 挂件窗口隐藏时不做无谓重绘
+            guard let self = self, let win = self.window, win.isVisible else { return }
+            self.setNeedsDisplay(self.bounds)
         }
     }
 

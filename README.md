@@ -1,5 +1,7 @@
 ﻿# 性能行情终端 · PerfTicker for macOS
 
+**简体中文** | [English](README.en.md)
+
 > 把 macOS「活动监视器」做成**炒股软件行情终端**：CPU / GPU / 内存 / 磁盘 / 网络……
 > 每一项系统指标都是一只「个股」，实时 K 线、五档盘口、逐笔成交、自选行情一应俱全。
 > 原生 Swift / AppKit，零外部依赖，单二进制双击即用。

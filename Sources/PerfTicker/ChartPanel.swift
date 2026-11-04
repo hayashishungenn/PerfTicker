@@ -68,9 +68,7 @@ final class ChartPanel: Panel {
 
     private func timeText(_ bucketMs: Int64) -> String {
         let t = Date().addingTimeInterval(Double(bucketMs - nowMs()) / 1000)
-        let f = DateFormatter()
-        f.dateFormat = st.intervalMs >= 1000 ? "HH:mm:ss" : "HH:mm:ss.S"
-        return f.string(from: t)
+        return (st.intervalMs >= 1000 ? Fmt.hms : Fmt.hmsTenth).string(from: t)
     }
 
     override func paint() {

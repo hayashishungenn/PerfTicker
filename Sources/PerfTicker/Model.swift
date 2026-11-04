@@ -28,6 +28,15 @@ func fmtThousands(_ v: Double, decimals: Int = 0) -> String {
     return f.string(from: NSNumber(value: v)) ?? String(v)
 }
 
+/// 共享日期格式化（仅主线程使用）：DateFormatter 构造成本高，避免在 30fps 绘制热路径上反复创建
+enum Fmt {
+    static let hms: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f }()
+    static let hmsTenth: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss.S"; return f }()
+    static let dateCn: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd EEE"; f.locale = Locale(identifier: "zh_CN"); return f
+    }()
+}
+
 /// 一条「个股」：把一项性能指标包装成行情品种（带分时、K 线、涨跌幅）。
 final class Metric {
     var code = "", name = "", group = "", unit = ""

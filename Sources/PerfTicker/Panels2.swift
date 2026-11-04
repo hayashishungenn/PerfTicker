@@ -106,7 +106,7 @@ final class FooterPanel: Panel {
             ("采样", st.paused ? "已暂停" : String(format: "%.1fs", Double(st.intervalMs) / 1000), st.paused ? Theme.warn : Theme.down),
             ("运行", String(format: "%02d:%02d:%02d", up / 3600, up % 3600 / 60, up % 60), Theme.txt),
             ("进程", "\(s.procCount)", Theme.txt), ("线程", "\(s.threads)", Theme.txt),
-            ("句柄", s.handles >= 100000 ? "\(s.handles / 1024)K" : "\(s.handles)", Theme.txt),
+            ("句柄", s.handles >= 100000 ? "\(s.handles / 1000)K" : "\(s.handles)", Theme.txt),
         ]
     }
 

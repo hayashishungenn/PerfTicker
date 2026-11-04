@@ -123,6 +123,14 @@ final class AppController: NSObject, NSWindowDelegate {
         var h = settings.h > 400 ? CGFloat(settings.h) : defH
         var x = settings.x > -9999 ? CGFloat(settings.x) : wa.origin.x + (wa.width - w) / 2
         var y = settings.y > -9999 ? CGFloat(settings.y) : wa.origin.y + (wa.height - h) / 2
+        // 记忆位置与任何屏幕都不相交（如拔掉外接屏）时回退居中，避免窗口完全不可见
+        if settings.x > -9999 {
+            let frame = NSRect(x: x, y: y, width: w, height: h)
+            if !NSScreen.screens.contains(where: { $0.frame.insetBy(dx: -20, dy: -20).intersects(frame) }) {
+                x = wa.origin.x + max(0, (wa.width - w) / 2)
+                y = wa.origin.y + max(0, (wa.height - h) / 2)
+            }
+        }
 
         window = NSWindow(
             contentRect: NSRect(x: x, y: y, width: w, height: h),
@@ -381,17 +389,25 @@ final class AppController: NSObject, NSWindowDelegate {
             m.push(m.read(s), now, vol)
         }
 
+        var alive = Set<Int32>()
         for p in s.procs {
+            alive.insert(p.pid)
             if let pc = prevCpu[p.pid] { p.cpuDelta = p.cpuPct - pc }
             prevCpu[p.pid] = p.cpuPct
             if st.procHist[p.pid] == nil { st.procHist[p.pid] = ProcHist() }
             st.procHist[p.pid]?.push(p.cpuPct)
         }
-        if prevCpu.count > 4000 { prevCpu.removeAll() }
-        // 进程历史只增不减会长期占用内存：超限后移除已退出进程的条目
+        // 进程历史只增不减会长期占用内存：超限后移除已退出进程的条目（以当前快照的 pid 集合为准）
         if st.procHist.count > 1200 {
-            for pid in st.procHist.keys.filter({ prevCpu[$0] == nil }).prefix(600) {
+            for pid in st.procHist.keys.filter({ !alive.contains($0) }).prefix(600) {
                 st.procHist.removeValue(forKey: pid)
+                prevCpu.removeValue(forKey: pid)
+            }
+        }
+        // prevCpu 超限同样按存活集合剔除；不能整体清空，否则下一帧所有进程的 cpuDelta 会失真为 0
+        if prevCpu.count > 4000 {
+            for pid in prevCpu.keys where !alive.contains(pid) {
+                prevCpu.removeValue(forKey: pid)
             }
         }
 

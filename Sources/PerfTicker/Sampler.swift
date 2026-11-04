@@ -47,6 +47,8 @@ final class Sampler {
     private var prevGpuNs: [Int32: UInt64] = [:]
     private var tb = mach_timebase_info_data_t()
     private let pageSize = Double(vm_kernel_page_size)
+    /// host port 全进程唯一，可长期持有；mach_host_self() 每次调用都返回需配对释放的新 send right
+    private let hostPort = mach_host_self()
 
     init() {
         mach_timebase_info(&tb)
@@ -92,7 +94,7 @@ final class Sampler {
         var n: natural_t = 0
         var info: processor_info_array_t?
         var cnt: mach_msg_type_number_t = 0
-        guard host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &n, &info, &cnt) == KERN_SUCCESS,
+        guard host_processor_info(hostPort, PROCESSOR_CPU_LOAD_INFO, &n, &info, &cnt) == KERN_SUCCESS,
               let info = info else { return }
         defer { vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: info)), vm_size_t(cnt) * vm_size_t(MemoryLayout<integer_t>.size)) }
         var cur: [[UInt32]] = []
@@ -130,7 +132,7 @@ final class Sampler {
         var st = vm_statistics64()
         var cnt = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
         let kr = withUnsafeMutablePointer(to: &st) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(cnt)) { host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &cnt) }
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(cnt)) { host_statistics64(hostPort, HOST_VM_INFO64, $0, &cnt) }
         }
         let gb = 1024.0 * 1024 * 1024
         s.memTotalGB = total / gb

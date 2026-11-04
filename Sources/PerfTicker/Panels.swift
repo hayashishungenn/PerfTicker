@@ -149,10 +149,8 @@ final class TitleBarPanel: Panel {
 
         // 时钟
         let now = Date()
-        let tf = DateFormatter(); tf.dateFormat = "HH:mm:ss"
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd EEE"; df.locale = Locale(identifier: "zh_CN")
-        Theme.text(tf.string(from: now), Theme.numXL, Theme.goldSoft, CGRect(x: clock.minX, y: 2, width: clock.width, height: 20), .right)
-        Theme.text(df.string(from: now), Theme.uiXS, Theme.textFade, CGRect(x: clock.minX, y: 21, width: clock.width, height: 14), .right)
+        Theme.text(Fmt.hms.string(from: now), Theme.numXL, Theme.goldSoft, CGRect(x: clock.minX, y: 2, width: clock.width, height: 20), .right)
+        Theme.text(Fmt.dateCn.string(from: now), Theme.uiXS, Theme.textFade, CGRect(x: clock.minX, y: 21, width: clock.width, height: 14), .right)
     }
 
     private func hit(_ l: CGPoint) -> (Int, Int) {
