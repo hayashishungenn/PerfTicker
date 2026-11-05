@@ -21,6 +21,17 @@ class Panel {
     func local(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x - bounds.minX, y: p.y - bounds.minY) }
     func invalidate() { f.view.setNeedsDisplay(bounds) }
 
+    /// 数值主色：多数指标跟行情涨跌；热压力按状态等级着色（颜色跟含义走，不跟涨跌）
+    func valueColor(_ m: Metric) -> NSColor {
+        if m.code == "000304" {
+            let t = Int(m.value.rounded())
+            if t >= 3 { return Theme.danger }
+            if t == 2 { return Theme.warn }
+            return Theme.txt
+        }
+        return Theme.chgColor(m.shownChg)
+    }
+
     func draw() {
         let ctx = Theme.cg
         ctx.saveGState()
@@ -124,10 +135,15 @@ final class TitleBarPanel: Panel {
         let pulse = (sin(st.frame * 3.2) + 1) / 2
         let dotR: CGFloat = 5
         let dotX = pill.minX + 10, dotY = pill.minY + (pill.height - dotR) / 2
-        if live { Theme.ellipse(CGRect(x: dotX - 3, y: dotY - 3, width: dotR + 6, height: dotR + 6), dotC.a(CGFloat(40 + 60 * (1 - pulse)) / 255)) }
+        // 「减弱动态效果」时停呼吸光环
+        if live && !Motion.reduce {
+            Theme.ellipse(CGRect(x: dotX - 3, y: dotY - 3, width: dotR + 6, height: dotR + 6), dotC.a(CGFloat(40 + 60 * (1 - pulse)) / 255))
+        }
         Theme.ellipse(CGRect(x: dotX, y: dotY, width: dotR, height: dotR), dotC)
         let pillTxt = live ? String(format: "实时采样 %.1fs", Double(st.intervalMs) / 1000) : "行情已暂停"
-        Theme.text(pillTxt, Theme.uiXS, live ? rgb(0x7E, 0xE0, 0xC0) : Theme.warn,
+        // 浅色主题下薄荷绿文字对比度不达 AA：按主题切换深浅墨色
+        let pillFg = live ? (Theme.dark ? rgb(0x7E, 0xE0, 0xC0) : rgb(0x0A, 0x5C, 0x4E)) : Theme.warn
+        Theme.text(pillTxt, Theme.uiXS, pillFg,
                    CGRect(x: dotX + 10, y: pill.minY, width: pill.width - 20, height: pill.height))
 
         // 采样周期分段器
@@ -201,6 +217,12 @@ final class IndexStripPanel: Panel {
         for (i, code) in Self.codes.enumerated() {
             let c = cell(i)
             guard let m = st.byCode(code) else { continue }
+            // 选中格：柔和底色 + 淡描边（dashboard QA：selection = tinted fill + faint ring）
+            let isSel = code == st.selected.code
+            if isSel {
+                Theme.fill(c, Theme.gold.a(22.0 / 255))
+                Theme.strokeRect(c.insetBy(dx: 0.5, dy: 0.5), Theme.gold.a(100.0 / 255))
+            }
             if i == hover { Theme.fill(c, Theme.rowHover) }
             let now = nowMs()
             if now < m.flashUntil {
@@ -208,7 +230,7 @@ final class IndexStripPanel: Panel {
                 Theme.fill(c, (m.flashDir > 0 ? Theme.up : Theme.down).a(CGFloat(13 * t) / 255))
             }
             if i > 0 { Theme.vLine(c.minX, 10, h - 10, Theme.line) }
-            let col = Theme.chgColor(m.shownChg)
+            let col = valueColor(m)
             let dcol = m.shownChgNoise ? Theme.textFade : col
             Theme.miniCandles(CGRect(x: c.maxX - 80, y: c.minY + 14, width: 66, height: 32), m.spark(48), bars: 14)
             Theme.textEllipsis(m.name, Theme.uiXS, Theme.textDim, CGRect(x: c.minX + 14, y: c.minY + 6, width: c.width - 28, height: 14))
@@ -309,7 +331,7 @@ final class WatchPanel: Panel {
         Theme.textEllipsis(m.name, selected ? Theme.uiM : Theme.uiS, selected ? Theme.textHi : Theme.txtHi2,
                            CGRect(x: rr.minX + 62, y: rr.minY, width: 96, height: rr.height))
         Theme.miniCandles(CGRect(x: w - 168, y: rr.minY + 5, width: 46, height: 14), m.spark(28), bars: 8)
-        let col = Theme.chgColor(m.shownChg)
+        let col = valueColor(m)
         let noise = m.shownChgNoise
         Theme.text(m.shownText, Theme.numS, col, CGRect(x: w - 120, y: rr.minY, width: 46, height: rr.height), .right)
         let badge = CGRect(x: w - 62, y: rr.minY + 5, width: 54, height: 14)
@@ -377,7 +399,7 @@ final class InstrumentPanel: Panel {
             Theme.text(tabLabels[i], Theme.uiXS, act ? Theme.gold : !enabled ? Theme.textFade : hover == i ? Theme.textHi : Theme.textDim, tabs[i], .center)
         }
 
-        let col = Theme.chgColor(m.shownChg)
+        let col = valueColor(m)
         Theme.text(m.shownText, Theme.numHuge, col, CGRect(x: 14, y: 32, width: 220, height: 36))
         let bw2 = Theme.measure(m.shownText, Theme.numHuge)
         Theme.text(m.unit, Theme.uiS, Theme.textDim, CGRect(x: 20 + bw2, y: 46, width: 60, height: 18))

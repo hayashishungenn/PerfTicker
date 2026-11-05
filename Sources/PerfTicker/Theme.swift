@@ -33,6 +33,7 @@ enum Theme {
     static var textHi = NSColor.black, txt = NSColor.black, txtHi2 = NSColor.black
     static var textDim = NSColor.black, textFade = NSColor.black, flat = NSColor.black
     static var up = NSColor.red, down = NSColor.green
+    static var danger = NSColor.red   // 危险状态色（与行情涨跌色解耦）
     static var gold = NSColor.black, goldDim = NSColor.black, goldSoft = NSColor.black
     static var blue = NSColor.black, purple = NSColor.black, cyan = NSColor.black, warn = NSColor.black
 
@@ -84,6 +85,7 @@ enum Theme {
             line = dark ? rgb(0x2E, 0x38, 0x4A) : rgb(0xB6, 0xC0, 0xD0)
             line2 = dark ? rgb(0x42, 0x50, 0x66) : rgb(0x8A, 0x98, 0xAC)
         }
+        danger = dark ? rgb(0xFF, 0x53, 0x53) : rgb(0xC6, 0x28, 0x28)
         applyColorMode(redUp: redUp)
     }
 

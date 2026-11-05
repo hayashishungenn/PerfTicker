@@ -190,7 +190,7 @@ enum Catalog {
         add("000300", "上下文切换", "系统", "K/s", 1) { $0.ctxSwitchPerSec / 1000 }
         add("000301", "进程数", "系统", "", 0) { Double($0.procCount) }
         add("000302", "线程数", "系统", "", 0) { Double($0.threads) }
-        add("000303", "句柄数", "系统", "", 0) { Double($0.handles) }
+        add("000303", "FD 数", "系统", "", 0) { Double($0.handles) }
         add("000304", "热压力", "系统", "级", 0) { Double($0.thermal) }
         return list
     }

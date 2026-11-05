@@ -106,7 +106,7 @@ final class FooterPanel: Panel {
             ("采样", st.paused ? "已暂停" : String(format: "%.1fs", Double(st.intervalMs) / 1000), st.paused ? Theme.warn : Theme.down),
             ("运行", String(format: "%02d:%02d:%02d", up / 3600, up % 3600 / 60, up % 60), Theme.txt),
             ("进程", "\(s.procCount)", Theme.txt), ("线程", "\(s.threads)", Theme.txt),
-            ("句柄", s.handles >= 100000 ? "\(s.handles / 1000)K" : "\(s.handles)", Theme.txt),
+            ("FD", s.handles >= 100000 ? "\(s.handles / 1000)K" : "\(s.handles)", Theme.txt),
         ]
     }
 
@@ -296,7 +296,7 @@ final class ProcPanel: Panel {
         Theme.text("GPU%", hf, hc, CGRect(x: c.gpu - 58, y: ch2.minY, width: 58, height: colH), .right)
         Theme.text("内存", hf, hc, CGRect(x: c.mem - 78, y: ch2.minY, width: 78, height: colH), .right)
         Theme.text("线程", hf, hc, CGRect(x: c.thr - 50, y: ch2.minY, width: 50, height: colH), .right)
-        Theme.text("句柄", hf, hc, CGRect(x: c.hnd - 58, y: ch2.minY, width: 58, height: colH), .right)
+        Theme.text("FD", hf, hc, CGRect(x: c.hnd - 58, y: ch2.minY, width: 58, height: colH), .right)
         Theme.text("K线走势", hf, hc, CGRect(x: c.spark, y: ch2.minY, width: sparkW, height: colH))
 
         let top = headerH + colH

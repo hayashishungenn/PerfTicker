@@ -106,13 +106,31 @@ final class ChartPanel: Panel {
         let plotRect = plot
         func Py(_ v: Double) -> CGFloat { plotRect.maxY - CGFloat((v - yMin) / (yMax - yMin)) * plotRect.height }
 
-        // 网格 + 右侧坐标轴
+        // 网格 + 右侧坐标轴：刻度吸附 1/2/5×10ⁿ 直观步长（dashboard QA：随机刻度 → 取整刻度）
         let rows = 4
-        for i in 0...rows {
-            let v = yMin + (yMax - yMin) * Double(i) / Double(rows)
-            let y = floor(Py(v))
-            Theme.hLine(plot.minX, plot.maxX, y, (i == 0 || i == rows) ? Theme.line2 : Theme.grid)
-            Theme.text(fmtD(v, m.decimals), Theme.numXXS, Theme.textFade, CGRect(x: plot.maxX + 7, y: y - 7, width: 52, height: 14))
+        Theme.hLine(plot.minX, plot.maxX, floor(Py(yMin)), Theme.line2)
+        Theme.hLine(plot.minX, plot.maxX, floor(Py(yMax)), Theme.line2)
+        let rawStep = (yMax - yMin) / Double(rows)
+        if rawStep.isFinite, rawStep > 0 {
+            let mag = pow(10.0, floor(log10(rawStep)))
+            let norm = rawStep / mag
+            let nice = (norm <= 1 ? 1.0 : norm <= 2 ? 2.0 : norm <= 5 ? 5.0 : 10.0) * mag
+            let dec = max(0, min(6, -Int(floor(log10(nice)))))
+            var v = ceil(yMin / nice) * nice
+            var lastY = CGFloat.greatestFiniteMagnitude
+            while v <= yMax + nice * 1e-6 {
+                // 消除 -0 与累加漂移（ceil(-0.15)*10 = -0.0 会显示成 "-0"）
+                let vv = abs(v) < nice * 1e-6 ? 0 : v
+                let y = floor(Py(vv))
+                // 翻转坐标系：y 数值越小越靠上；排除贴着上下边界的刻度
+                if y != lastY, y < floor(Py(yMin)) - 1, y > floor(Py(yMax)) + 1 {
+                    Theme.hLine(plot.minX, plot.maxX, y, Theme.grid)
+                    let txt = vv >= 10000 ? fmtThousands(vv) : fmtD(vv, dec)
+                    Theme.text(txt, Theme.numXXS, Theme.textFade, CGRect(x: plot.maxX + 7, y: y - 7, width: 52, height: 14))
+                    lastY = y
+                }
+                v += nice
+            }
         }
         Theme.vLine(plot.maxX + 1, plot.minY, vol.maxY, Theme.line)
 
