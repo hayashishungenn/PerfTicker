@@ -219,10 +219,22 @@ enum Theme {
     // ── 迷你图 ──
     static func miniCandles(_ r: CGRect, _ data: [Double], bars barsIn: Int) {
         guard data.count >= 2, r.width >= 6, r.height >= 6 else { return }
-        let bars = max(3, min(barsIn, max(3, Int(r.width / 3.2))))
         let n = data.count
         var mn = data.min()!, mx = data.max()!
-        if mx - mn < 1e-9 { mx += 0.01; mn -= 0.01 }
+        if mx - mn < 1e-9 {
+            // 平坦序列（如恒为 0 的热压力）：一条中性灰线，不渲染十字星墙——健康数据保持安静
+            let ctx = cg
+            let yy = r.midY.rounded()
+            ctx.saveGState()
+            ctx.setStrokeColor(textFade.cgColor)
+            ctx.setLineWidth(1)
+            ctx.move(to: CGPoint(x: r.minX, y: yy))
+            ctx.addLine(to: CGPoint(x: r.maxX, y: yy))
+            ctx.strokePath()
+            ctx.restoreGState()
+            return
+        }
+        let bars = max(3, min(barsIn, max(3, Int(r.width / 3.2))))
         let pad = (mx - mn) * 0.12
         mn -= pad; mx += pad
         let slot = r.width / CGFloat(bars)

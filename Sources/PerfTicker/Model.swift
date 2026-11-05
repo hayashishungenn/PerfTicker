@@ -91,6 +91,9 @@ final class Metric {
     }
     var chgText: String { deltaText(chg) }
     var shownChgText: String { deltaText(shownChg) }
+    /// 变动小于显示精度 2 个步长即视为噪声（含 −0.00 类负零）：中性展示，不用红绿喊叫
+    var chgNoise: Bool { abs(chg) < 2 * pow(10, -Double(decimals)) }
+    var shownChgNoise: Bool { abs(shownChg) < 2 * pow(10, -Double(decimals)) }
 
     func fmt(_ v: Double) -> String {
         if abs(v) >= 10000 { return fmtThousands(v) }

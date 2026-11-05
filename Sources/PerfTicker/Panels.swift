@@ -209,12 +209,13 @@ final class IndexStripPanel: Panel {
             }
             if i > 0 { Theme.vLine(c.minX, 10, h - 10, Theme.line) }
             let col = Theme.chgColor(m.shownChg)
+            let dcol = m.shownChgNoise ? Theme.textFade : col
             Theme.miniCandles(CGRect(x: c.maxX - 80, y: c.minY + 14, width: 66, height: 32), m.spark(48), bars: 14)
             Theme.textEllipsis(m.name, Theme.uiXS, Theme.textDim, CGRect(x: c.minX + 14, y: c.minY + 6, width: c.width - 28, height: 14))
             Theme.text(m.shownText, Theme.numL, col, CGRect(x: c.minX + 14, y: c.minY + 21, width: 120, height: 22))
             let vw = Theme.measure(m.shownText, Theme.numL)
             Theme.text(m.unit, Theme.uiXS, Theme.textFade, CGRect(x: c.minX + 16 + vw, y: c.minY + 24, width: 44, height: 16))
-            Theme.text(m.shownChgText, Theme.numXXS, col, CGRect(x: c.minX + 14, y: c.minY + 43, width: 90, height: 13))
+            Theme.text(m.shownChgNoise ? "—" : m.shownChgText, Theme.numXXS, dcol, CGRect(x: c.minX + 14, y: c.minY + 43, width: 90, height: 13))
         }
     }
 
@@ -309,10 +310,11 @@ final class WatchPanel: Panel {
                            CGRect(x: rr.minX + 62, y: rr.minY, width: 96, height: rr.height))
         Theme.miniCandles(CGRect(x: w - 168, y: rr.minY + 5, width: 46, height: 14), m.spark(28), bars: 8)
         let col = Theme.chgColor(m.shownChg)
+        let noise = m.shownChgNoise
         Theme.text(m.shownText, Theme.numS, col, CGRect(x: w - 120, y: rr.minY, width: 46, height: rr.height), .right)
         let badge = CGRect(x: w - 62, y: rr.minY + 5, width: 54, height: 14)
-        if abs(m.chgPct) > 0.001 { Theme.roundedFill(badge, 2, col.a(26.0 / 255)) }
-        Theme.text(m.shownChgText, Theme.numXXS, col, badge, .center)
+        if !noise { Theme.roundedFill(badge, 2, col.a(26.0 / 255)) }
+        Theme.text(noise ? "—" : m.shownChgText, Theme.numXXS, noise ? Theme.textFade : col, badge, .center)
     }
 
     private func rowAt(_ l: CGPoint) -> Int {
@@ -384,8 +386,9 @@ final class InstrumentPanel: Panel {
         let chgTxt = sign + m.fmt(abs(m.shownChg)) + (m.unit == "%" ? "pt" : "")
         let pctTxt = sign + String(format: "%.2f", abs(m.chgPct)) + "%"
         let cx2 = 20 + bw2 + 70
-        Theme.text(chgTxt, Theme.numS, col, CGRect(x: cx2, y: 38, width: 120, height: 16))
-        if m.unit != "%" {
+        let chgCol = m.shownChgNoise ? Theme.textFade : col
+        Theme.text(m.shownChgNoise ? "—" : chgTxt, Theme.numS, chgCol, CGRect(x: cx2, y: 38, width: 120, height: 16))
+        if m.unit != "%" && !m.shownChgNoise && abs(m.value) >= 1 {
             let pb = CGRect(x: cx2 + 76, y: 54, width: 76, height: 16)
             Theme.roundedFill(pb, 2, col.a(38.0 / 255))
             Theme.text(pctTxt, Theme.numXS, col, pb, .center)

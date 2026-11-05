@@ -125,7 +125,9 @@ The exponent 1.7 models increasing marginal returns; below break-even the unit l
 | Process CPU / memory / threads | `libproc` (`proc_listallpids` / `proc_pidinfo`) | process CPU% is machine-share (0–100) |
 | Thermal pressure | `ProcessInfo.thermalState` | Nominal/Fair/Serious/Critical derating |
 
-> Apple Silicon does not expose real-time frequencies or dedicated VRAM sensors to third-party apps; those panels use utilization/thermal substitutes (noted in the UI). All collection is **read-only** and needs no administrator privileges.
+> Apple Silicon does not expose real-time frequencies or dedicated VRAM sensors to third-party apps; those panels use utilization/thermal substitutes (noted in the UI).
+> Disk/network loads in the economy panel are **game-calibrated**: ~10MB/s disk and ~5MB/s network read as full capacity — they are not real IO saturation.
+> All collection is **read-only** and needs no administrator privileges.
 
 ## 9. Build
 

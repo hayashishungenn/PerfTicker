@@ -115,10 +115,15 @@ final class FooterPanel: Panel {
         func add(_ t: String, _ c: NSColor) { segs.append((t, c, Theme.measure(t, Theme.uiXS))) }
         for m in st.metrics where m.group != "处理器" {
             add(m.name + " ", Theme.textDim)
-            let col = Theme.chgColor(m.chg)
+            let noise = m.chgNoise
+            let col = noise ? Theme.textFade : Theme.chgColor(m.chg)
             add(m.display, col)
             add(" " + m.unit + "  ", Theme.textFade)
-            add((m.chgPct >= 0 ? "▲" : "▼") + String(format: "%.2f%%", abs(m.chgPct)), col)
+            // 小基数上的百分比（如 0.01MB/s ▲75%、0.00 ▼100%）是噪声：只在真实变动且基数量级足够时展示
+            let pctMeaningful = m.unit == "%" || abs(m.value) >= 1
+            if !noise && pctMeaningful {
+                add((m.chgPct >= 0 ? "▲" : "▼") + String(format: "%.2f%%", abs(m.chgPct)), col)
+            }
             add("   ｜   ", rgb(0x3A, 0x44, 0x55))
         }
     }
