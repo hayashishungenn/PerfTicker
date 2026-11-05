@@ -31,7 +31,6 @@ final class AppController: NSObject, NSWindowDelegate {
     private var frameCount: Double = 0
     private var ecoLastSave: Double = 0
     private var lastTickMs: Int64 = 0
-    private var lastStatusSec: Int64 = 0
     private var prevCpu: [Int32: Double] = [:]
     private var prevPids = Set<Int32>()
     private var prevNames: [Int32: String] = [:]
@@ -271,8 +270,7 @@ final class AppController: NSObject, NSWindowDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
             button.image = Art.makeStatusIcon()
-            button.imagePosition = .imageLeading
-            button.title = " 性能"
+            button.imagePosition = .imageOnly
         }
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "打开主面板", action: #selector(restoreFromTray), keyEquivalent: "o"))
@@ -284,6 +282,14 @@ final class AppController: NSObject, NSWindowDelegate {
         menu.addItem(NSMenuItem(title: "退出", action: #selector(exitApp), keyEquivalent: "q"))
         for item in menu.items { item.target = self }
         statusItem?.menu = menu
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            if let item = self?.statusItem {
+                let b = item.button
+                Diag.write("STATUS-ITEM", "isVisible=\(item.isVisible) length=\(item.length) btnFrame=\(String(describing: b?.window?.frame)) imgNil=\(b?.image == nil)")
+            } else {
+                Diag.write("STATUS-ITEM", "statusItem is nil!")
+            }
+        }
     }
 
     @objc func restoreFromTray() {
@@ -367,15 +373,6 @@ final class AppController: NSObject, NSWindowDelegate {
         if st.economy.enabled && frameCount - ecoLastSave > 15 {
             ecoLastSave = frameCount
             saveSettings()
-        }
-
-        // 状态栏气泡简报（每秒一次即可）
-        if let button = statusItem?.button, now / 1000 != lastStatusSec {
-            lastStatusSec = now / 1000
-            let s = st.snap
-            var tip = String(format: " CPU %.0f%% · GPU %.0f%% · 内存 %.0f%%", s.cpuPct, s.gpu.available ? s.gpu.utilPct : 0, s.memPct)
-            if st.economy.enabled { tip += String(format: " · ¥%.0f", st.economy.total) }
-            button.title = tip
         }
     }
 
